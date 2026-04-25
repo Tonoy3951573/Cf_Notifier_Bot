@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import time
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +16,21 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+# ================== DUMMY SERVER (RENDER FIX) ==================
+def run_dummy_server():
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Bot is running")
+
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), Handler)
+    server.serve_forever()
+
+# start dummy server in background
+threading.Thread(target=run_dummy_server, daemon=True).start()
 
 # ================== CONFIG ==================
 STATE_PATH = Path("bot_state.json")
@@ -169,6 +186,7 @@ def main():
     # scheduler
     app.job_queue.run_repeating(check_contests, interval=CHECK_INTERVAL, first=10)
 
+    print("🌐 Dummy server started")
     print("🚀 Bot running...")
     app.run_polling()
 
