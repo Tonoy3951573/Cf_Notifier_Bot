@@ -14,7 +14,6 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID_ENV = os.getenv("TELEGRAM_CHAT_ID")
 
 # ================== CONFIG ==================
 STATE_PATH = Path("bot_state.json")
@@ -45,11 +44,6 @@ def save_state(state):
         json.dump(state, f)
 
 def get_chat_id():
-    if CHAT_ID_ENV:
-        try:
-            return int(CHAT_ID_ENV)
-        except:
-            return None
     state = load_state()
     return state.get("chat_id")
 
@@ -63,7 +57,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "/start - Start bot\n"
         "/watch - Enable alerts\n"
-        "/status - Check status"
+        "/status - Check status\n"
+        "/upcoming - Show upcoming contests"
     )
 
 async def watch(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -80,6 +75,31 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"✅ Alerts active for chat: {chat_id}")
 
+# ================== NEW FEATURE ==================
+async def upcoming(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    contests = fetch_contests()
+
+    if not contests:
+        await update.message.reply_text("❌ Could not fetch contests.")
+        return
+
+    contests.sort(key=lambda x: x["startTimeSeconds"])
+
+    msg = "📅 Upcoming Codeforces Contests:\n\n"
+
+    for c in contests[:5]:
+        name = c["name"]
+        start = c["startTimeSeconds"]
+        cid = c["id"]
+
+        msg += (
+            f"📌 {name}\n"
+            f"⏰ {format_time(start)}\n"
+            f"🔗 https://codeforces.com/contest/{cid}\n\n"
+        )
+
+    await update.message.reply_text(msg)
+
 # ================== CORE LOGIC ==================
 def fetch_contests():
     try:
@@ -94,7 +114,7 @@ def format_time(ts):
 
 async def check_contests(context: ContextTypes.DEFAULT_TYPE):
     chat_id = get_chat_id()
-    if not chat_id:
+    if not chat_id or not isinstance(chat_id, int):
         return
 
     state = load_state()
@@ -109,10 +129,6 @@ async def check_contests(context: ContextTypes.DEFAULT_TYPE):
         start = c["startTimeSeconds"]
 
         diff = start - now
-
-        # OPTIONAL filter (uncomment if needed)
-        # if "Div." not in name:
-        #     continue
 
         for alert in ALERTS:
             key = f"{cid}_{alert}"
@@ -148,6 +164,7 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("watch", watch))
     app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("upcoming", upcoming))
 
     # scheduler
     app.job_queue.run_repeating(check_contests, interval=CHECK_INTERVAL, first=10)
